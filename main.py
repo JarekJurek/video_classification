@@ -4,7 +4,8 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.nn as nn
 from models.PerFrameCNN import PerFrameTrained
-from dataset import FrameImageDataset
+from datasets import FrameImageDataset, FrameVideoDataset
+from tqdm import tqdm
 
 
 
@@ -12,7 +13,7 @@ def train(model, optimizer, train_dataloader, val_dataloader, loss_function, num
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
-        for frames, labels in train_dataloader:
+        for frames, labels in tqdm(train_dataloader, desc="training"):
             frames, labels = frames.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(frames)
@@ -35,7 +36,7 @@ def validate(model, dataloader, loss_function, device):
     total = 0
 
     with torch.no_grad():
-        for frames, labels in dataloader:
+        for frames, labels in tqdm(dataloader, desc="Validating"):
             frames, labels = frames.to(device), labels.to(device)
             outputs = model(frames)
             loss = loss_function(outputs, labels)
@@ -49,8 +50,48 @@ def validate(model, dataloader, loss_function, device):
     return val_loss, val_accuracy
 
 
+def test(model, test_dataloader, device="cuda"):
+    model.eval()
+    results = {}  # To store video-level predictions
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for frames, labels in test_dataloader:
+            # frames: [batch_size, channels, num_frames, height, width]
+            # labels: [batch_size]
+            
+            frames = frames.to(device)
+            labels = labels.to(device)
+
+            # Flatten frames for frame-level predictions
+            batch_size, channels, num_frames, height, width = frames.size()
+            frames = frames.permute(0, 2, 1, 3, 4)  # [batch_size, num_frames, channels, height, width]
+            frames = frames.reshape(-1, channels, height, width)  # [batch_size * num_frames, channels, height, width]
+        
+            outputs = model(frames)  # [batch_size * num_frames, num_classes]
+
+            # Reshape outputs back to video-level
+            outputs = outputs.reshape(batch_size, num_frames, -1)  # [batch_size, num_frames, num_classes]
+
+            aggregated_outputs = torch.mean(outputs, dim=1)  # [batch_size, num_classes]
+
+            _, predicted = torch.max(aggregated_outputs, 1)  # [batch_size]
+
+            # Store results and compute accuracy
+            for i in range(batch_size):
+                results[i] = predicted[i].item()  # Store video-level prediction
+                correct += (predicted[i] == labels[i]).item()
+                total += 1
+
+    accuracy = correct / total
+    print(f"Test Accuracy: {accuracy:.2%}")
+    return results
+
+
+
 def main():
-    root_dir = "/work3/ppar/data/ucf101"
+    root_dir = "/zhome/a2/c/213547/video_classification/datasets/ufc10"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = PerFrameTrained(num_classes=10).to(device)
     optimizer = Adam(model.parameters(), lr=1e-4)
@@ -63,9 +104,11 @@ def main():
     ])
     train_dataset = FrameImageDataset(root_dir=root_dir, split="train", transform=transform)
     val_dataset = FrameImageDataset(root_dir=root_dir, split="val", transform=transform)
+    test_dataset = FrameVideoDataset(root_dir=root_dir, split="test", transform=transform)
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     model = train(
         model=model,

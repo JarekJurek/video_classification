@@ -30,8 +30,12 @@ class PerFrameOwn(nn.Module):
 class PerFrameTrained(nn.Module):
     def __init__(self, num_classes=10):
         super(PerFrameTrained, self).__init__()
+        # Load the EfficientNet model
         self.backbone = models.efficientnet_v2_s(pretrained=True)
-        self.backbone.fc = nn.Linear(self.backbone.fc.in_features, num_classes)
+        
+        # Replace the classifier with a custom one
+        in_features = self.backbone.classifier[1].in_features  # Get the input features of the classifier
+        self.backbone.classifier[1] = nn.Linear(in_features, num_classes)  # Replace it with a new linear layer
 
     def forward(self, x):
         return self.backbone(x)
