@@ -4,7 +4,7 @@ from torchvision import models
 
 class PerFrameOwn(nn.Module):
     def __init__(self, num_classes=10):
-        super(PerFrameCNN, self).__init__()
+        super(PerFrameOwn, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
             nn.ReLU(),
