@@ -9,11 +9,16 @@ from tqdm import tqdm
 
 
 
+from tqdm import tqdm  # For progress bar
+
 def train(model, optimizer, train_dataloader, val_dataloader, loss_function, num_epochs=10, device="cuda"):
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
-        for frames, labels in tqdm(train_dataloader, desc="training"):
+        correct = 0
+        total = 0
+        
+        for frames, labels in tqdm(train_dataloader, desc="Training"):
             frames, labels = frames.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(frames)
@@ -22,10 +27,17 @@ def train(model, optimizer, train_dataloader, val_dataloader, loss_function, num
             optimizer.step()
             train_loss += loss.item()
 
+            _, predicted = torch.max(outputs, 1)  # Get the class with the highest score
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+
+        train_accuracy = correct / total
+
         val_loss, val_accuracy = validate(model, val_dataloader, loss_function, device)
+
         print(f"Epoch {epoch+1}/{num_epochs}")
-        print(f"[TRAIN] Loss: {train_loss/len(train_dataloader):.4f}, Accuracy: ")
-        print(f"[Validation] Loss: {val_loss/len(val_dataloader):.4f}, Accuracy: {val_accuracy}")
+        print(f"[TRAIN] Loss: {train_loss/len(train_dataloader):.4f}, Accuracy: {train_accuracy:.2%}")
+        print(f"[VALIDATION] Loss: {val_loss/len(val_dataloader):.4f}, Accuracy: {val_accuracy:.2%}")
     return model
 
 
@@ -50,7 +62,7 @@ def validate(model, dataloader, loss_function, device):
     return val_loss, val_accuracy
 
 
-def test(model, test_dataloader, device="cuda"):
+def test(model, test_dataloader, device):
     model.eval()
     results = {}  # To store video-level predictions
     correct = 0
@@ -108,7 +120,7 @@ def main():
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=8, shuffle=False)
 
     model = train(
         model=model,
@@ -116,9 +128,11 @@ def main():
         train_dataloader=train_loader,
         val_dataloader=val_loader,
         loss_function=loss_function,
-        num_epochs=10,
+        num_epochs=3,
         device=device,
     )
+
+    test(model, test_loader, device)
 
 if __name__ == "__main__":
     main()
