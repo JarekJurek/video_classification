@@ -19,7 +19,7 @@ class LateFusionEfficientNetV2Small(nn.Module):
 
     def forward(self, frames):
         """
-        Args:
+        Args
             frames: Tensor of shape [Batch, Channels, NumFrames, Height, Width]
         Returns:
             video_logits: Tensor of shape [Batch, NumClasses]
