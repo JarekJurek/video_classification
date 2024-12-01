@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
-from torchvision.models import efficientnet_v2_s
+from torchvision.models import efficientnet_v2_s, EfficientNet_V2_S_Weights
 
 class EarlyFusionEfficientNetV2Small(nn.Module):
     def __init__(self, num_classes=10, pretrained=True):
         super(EarlyFusionEfficientNetV2Small, self).__init__()
         
         # Pretrained EfficientNet backbone
-        self.backbone = efficientnet_v2_s(pretrained=pretrained)
+        weights = EfficientNet_V2_S_Weights.IMAGENET1K_V1  # Use pre-trained weights
+        self.backbone = efficientnet_v2_s(weights=weights)
         
         # Adjust input layer to handle temporal frames
         in_channels = self.backbone.features[0][0].in_channels

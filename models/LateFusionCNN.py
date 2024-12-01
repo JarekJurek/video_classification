@@ -1,44 +1,42 @@
 import torch
 import torch.nn as nn
-from torchvision.models import efficientnet_v2_s
+from torchvision.models import efficientnet_v2_s, EfficientNet_V2_S_Weights
 
-class LateFusionEfficientNetV2Small(nn.Module):
-    def __init__(self, num_classes=10, pretrained=True):
-        super(LateFusionEfficientNetV2Small, self).__init__()
-        # Load pre-trained EfficientNet V2 Small
-        self.backbone = efficientnet_v2_s(pretrained=pretrained)
-        self.feature_extractor = nn.Sequential(*list(self.backbone.children())[:-1])  # Remove classifier
-        
-        # Fully connected layer for feature aggregation
-        self.fc_fusion = nn.Sequential(
-            nn.Linear(self.backbone.classifier[1].in_features, 256),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
-        )
 
-    def forward(self, frames):
+class LateFusionModel(nn.Module):
+    def __init__(self, num_classes):
+        super(LateFusionModel, self).__init__()
+        weights = EfficientNet_V2_S_Weights.IMAGENET1K_V1
+        self.cnn = efficientnet_v2_s(weights=weights)
+        feature_dim = self.cnn.classifier[1].in_features  # Save the feature dimension before removing the classifier
+        self.cnn.classifier = nn.Identity()  # Remove the classification head
+        self.fc = nn.Linear(feature_dim, num_classes)  # Linear layer for classification
+
+    def forward(self, video_frames):
         """
-        Args
-            frames: Tensor of shape [Batch, Channels, NumFrames, Height, Width]
+        Args:
+            video_frames: Tensor of shape (B, C, T, H, W)
         Returns:
-            video_logits: Tensor of shape [Batch, NumClasses]
+            output: Tensor of shape (B, num_classes)
         """
-        batch_size, channels, num_frames, height, width = frames.size()
-        frames = frames.permute(0, 2, 1, 3, 4)  # Reshape to [Batch, NumFrames, Channels, Height, Width]
+        # Permute dimensions to (B, T, C, H, W)
+        video_frames = video_frames.permute(0, 2, 1, 3, 4)
+        
+        batch_size, num_frames, channels, height, width = video_frames.size()
+        
+        # Reshape to (B*T, C, H, W) to process each frame independently
+        video_frames = video_frames.reshape(-1, channels, height, width)
+        
+        # Extract features for each frame
+        frame_features = self.cnn(video_frames)
+        
+        # Reshape back to (B, T, D)
+        frame_features = frame_features.view(batch_size, num_frames, -1)
+        
+        # Pool features across time (average)
+        pooled_features = torch.mean(frame_features, dim=1)
+        
+        # Classification
+        output = self.fc(pooled_features)
+        return output
 
-        # Process each frame independently through the backbone
-        frame_features = []
-        for i in range(num_frames):
-            frame = frames[:, i, :, :, :]  # [Batch, Channels, Height, Width]
-            feature = self.feature_extractor(frame)  # Extract spatial features
-            feature = torch.flatten(feature, 1)  # Flatten for FC layers
-            frame_features.append(feature)
-
-        # Stack frame features and fuse
-        frame_features = torch.stack(frame_features, dim=1)  # [Batch, NumFrames, Features]
-        fused_features = torch.mean(frame_features, dim=1)  # Mean fusion
-
-        # Final classification
-        video_logits = self.fc_fusion(fused_features)
-        return video_logits
