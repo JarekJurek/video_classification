@@ -4,12 +4,13 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.nn as nn
-from models.LateFusionCNN import LateFusionModel
+from models.EarlyFusionCNN import EarlyFusionModel
 from datasets import FrameVideoDataset
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 from utils import plot_training_metrics
+
 
 
 def train(model, optimizer, train_dataloader, val_dataloader, loss_function, num_epochs=10, device="cuda"):
@@ -72,7 +73,6 @@ def validate(model, dataloader, loss_function, device):
     return val_loss, val_accuracy
 
 
-
 def test(model, test_dataloader, device, output_dir="output"):
     model.eval()
     correct = 0
@@ -82,11 +82,8 @@ def test(model, test_dataloader, device, output_dir="output"):
 
     with torch.no_grad():
         for batch_idx, (frames, labels) in enumerate(tqdm(test_dataloader, desc="Testing")):
-            # frames: (B, T, C, H, W), labels: (B)
             frames, labels = frames.to(device), labels.to(device)
-
             outputs = model(frames)  # Shape: (B, num_classes)
-
             _, predicted = torch.max(outputs, 1)  # Shape: (B)
 
             all_preds.extend(predicted.cpu().numpy())
@@ -113,11 +110,11 @@ def test(model, test_dataloader, device, output_dir="output"):
 
 def main():
     root_dir = "/zhome/a2/c/213547/video_classification/datasets/ufc10"
-    output_dir = "output_late_fusion"
+    output_dir = "output_early_fusion"
     os.makedirs(output_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LateFusionModel(num_classes=10).to(device)
+    model = EarlyFusionModel(num_classes=10, num_frames=10).to(device)
     optimizer = Adam(model.parameters(), lr=1e-4)
     loss_function = nn.CrossEntropyLoss()
 
@@ -140,7 +137,7 @@ def main():
         train_dataloader=train_loader,
         val_dataloader=val_loader,
         loss_function=loss_function,
-        num_epochs=15,
+        num_epochs=10,
         device=device,
     )
 
