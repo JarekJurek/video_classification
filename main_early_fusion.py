@@ -137,7 +137,7 @@ def main():
         train_dataloader=train_loader,
         val_dataloader=val_loader,
         loss_function=loss_function,
-        num_epochs=10,
+        num_epochs=15,
         device=device,
     )
 

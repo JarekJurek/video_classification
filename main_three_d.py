@@ -110,8 +110,8 @@ def test(model, test_dataloader, device, output_dir="output"):
 
 
 def main():
-    root_dir = "/zhome/a2/c/213547/video_classification/datasets/ufc10"
-    output_dir = "output_early_fusion"
+    root_dir = "/dtu/datasets1/02516/ucf101_noleakage"  
+    output_dir = "output_three_d_nl"
     os.makedirs(output_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -138,7 +138,7 @@ def main():
         train_dataloader=train_loader,
         val_dataloader=val_loader,
         loss_function=loss_function,
-        num_epochs=10,
+        num_epochs=15,
         device=device,
     )
 
