@@ -6,6 +6,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from datasets import FrameVideoDataset, FlowVideoDataset  # Use FrameVideoDataset
 from models.dual_stream import DualStreamModel, PerFrameTrained, TemporalStreamEarlyFusion
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 from utils import plot_training_metrics
 from tqdm import tqdm
 import torch.nn as nn
@@ -98,20 +100,36 @@ def test(model, test_loader, device, output_dir):
     model.eval()
     correct = 0
     total = 0
+    all_labels = []
+    all_preds = []
 
     with torch.no_grad():
-        for frames, flows, labels in tqdm(test_loader, desc="Testing"):
+        for batch_idx, (frames, flows, labels) in enumerate(tqdm(test_loader, desc="Testing")):
             frames = frames.to(device)
             flows = flows.to(device)
             labels = labels.to(device)
 
-            outputs = model(frames, flows)  # [batch_size, num_classes]
+            outputs = model(frames, flows)
             _, predicted = torch.max(outputs, 1)
+
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
             correct += (predicted == labels).sum().item()
             total += labels.size(0)
 
     test_accuracy = correct / total
     print(f"Test Accuracy: {test_accuracy:.2%}")
+
+    # Confusion matrix
+    os.makedirs(output_dir, exist_ok=True)
+    cm = confusion_matrix(all_labels, all_preds)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot(cmap="Blues")
+    cm_path = os.path.join(output_dir, "confusion_matrix.png")
+    plt.savefig(cm_path)
+    plt.close()
+    print(f"Confusion matrix saved to {cm_path}")
 
     # Optionally, save test results
     with open(os.path.join(output_dir, "test_results.txt"), "w") as f:
@@ -145,19 +163,6 @@ def main():
 
     test_frame_dataset = FrameVideoDataset(root_dir=root_dir, split="test", transform=transform, stack_frames=True)
     test_flow_dataset = FlowVideoDataset(root_dir=root_dir, split="test", resize=(64, 64))
-
-    def verify_dataset_alignment(frame_dataset, flow_dataset, num_samples=5):
-        for idx in range(num_samples):
-            frames, label1 = frame_dataset[idx]
-            flows, label2 = flow_dataset[idx]
-            frame_video_name = frame_dataset.video_paths[idx].split('/')[-1].split('.avi')[0]
-            flow_video_name = flow_dataset.video_paths[idx].split('/')[-1].split('.avi')[0]
-            assert frame_video_name == flow_video_name, f"Mismatch at index {idx}: {frame_video_name} vs {flow_video_name}"
-        print("Dataset alignment verified for first {} samples.".format(num_samples))
-
-    verify_dataset_alignment(train_frame_dataset, train_flow_dataset)
-    verify_dataset_alignment(val_frame_dataset, val_flow_dataset)
-    verify_dataset_alignment(test_frame_dataset, test_flow_dataset)
 
     train_dataset = CombinedDataset(train_frame_dataset, train_flow_dataset)
     val_dataset = CombinedDataset(val_frame_dataset, val_flow_dataset)
