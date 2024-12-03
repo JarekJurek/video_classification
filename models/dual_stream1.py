@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
-from torchvision.models import EfficientNet_V2_S_Weights
 
 # Spatial Stream Model
 class SpatialStreamConvNet(nn.Module):
@@ -28,21 +27,40 @@ class SpatialStreamConvNet(nn.Module):
         self.fc3 = nn.Linear(2048, num_classes)
 
     def forward(self, x):
+        """
+        Args:
+            x: Tensor of shape [batch_size, 3, num_frames, H, W]
+        Returns:
+            Tensor of shape [batch_size, num_classes]
+        """
+        batch_size, channels, num_frames, height, width = x.size()
+        # Reshape: [batch_size, 3, num_frames, H, W] -> [batch_size * num_frames, 3, H, W]
+        x = x.permute(0, 2, 1, 3, 4).reshape(-1, channels, height, width)
+
+        # Pass through the convolutional layers
         x = self.pool1(F.relu(self.norm1(self.conv1(x))))
         x = self.pool2(F.relu(self.norm2(self.conv2(x))))
         x = F.relu(self.conv3(x))
         x = F.relu(self.conv4(x))
         x = self.pool3(F.relu(self.conv5(x)))
+
+        # Flatten and pass through fully connected layers
         x = x.view(x.size(0), -1)  # Flatten
         x = F.relu(self.fc1(x))
         x = self.dropout1(x)
         x = F.relu(self.fc2(x))
         x = self.dropout2(x)
-        x = self.fc3(x)
+        x = self.fc3(x)  # [batch_size * num_frames, num_classes]
+
+        # Reshape back: [batch_size * num_frames, num_classes] -> [batch_size, num_frames, num_classes]
+        x = x.view(batch_size, num_frames, -1)
+
+        # Aggregate over frames
+        x = x.mean(dim=1)  # Average over frames -> [batch_size, num_classes]
         return x
 
 
-# Temporal Stream Model
+# Temporal Stream Model (No Changes Required)
 class TemporalStreamEarlyFusion(nn.Module):
     def __init__(self, num_classes=10):
         super(TemporalStreamEarlyFusion, self).__init__()
@@ -80,7 +98,7 @@ class TemporalStreamEarlyFusion(nn.Module):
         return x
 
 
-# Dual Stream Model
+# Dual Stream Model (No Changes Required)
 class DualStreamModel(nn.Module):
     def __init__(self, spatial_model, temporal_model):
         super(DualStreamModel, self).__init__()
@@ -90,7 +108,7 @@ class DualStreamModel(nn.Module):
     def forward(self, spatial_input, temporal_input):
         """
         Args:
-            spatial_input: Tensor of shape [batch_size, 3, H, W]
+            spatial_input: Tensor of shape [batch_size, 3, num_frames, H, W]
             temporal_input: Tensor of shape [batch_size, 18, H, W]
         Returns:
             Tensor of shape [batch_size, num_classes]
@@ -101,6 +119,3 @@ class DualStreamModel(nn.Module):
         # Fusion: Average the class probabilities
         combined_output = (spatial_output + temporal_output) / 2
         return combined_output
-
-
-
